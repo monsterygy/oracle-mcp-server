@@ -2,7 +2,7 @@
 
 A production-grade [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Oracle database interaction, providing 11 tools for full CRUD, transactions, execution plans, and comprehensive safety guardrails.
 
-> **npx ready** — No clone, no build. Just `npx gy-oracle-database-mcp-server` and you're connected.
+> **拿来即用** — 无需 clone、无需手动 build。配置好 mcp.json 就能用。
 
 ## Features
 
@@ -40,54 +40,113 @@ A production-grade [Model Context Protocol](https://modelcontextprotocol.io/) (M
 
 ---
 
-## Quick Start (npx — zero setup)
+## Quick Start
 
-### Option A: npx (recommended, no install needed)
+三种方式，按需选择：
 
-```bash
-npx gy-oracle-database-mcp-server
-```
+### 方式一：GitHub npx（最简单，推荐给同事）
 
-That's it. npx automatically downloads, builds, and runs the server. Pass Oracle credentials via environment variables:
+无需 clone、无需手动 build。`prepare` 脚本会自动编译。
 
 ```bash
-ORACLE_USER=hr \
-ORACLE_PASSWORD=yourpass \
-ORACLE_CONNECT_STRING=localhost:1521/ORCLPDB1 \
-npx gy-oracle-database-mcp-server
+npx -y github:monsterygy/oracle-mcp-server
 ```
 
-### Option B: Global install
-
-```bash
-npm install -g gy-oracle-database-mcp-server
-gy-oracle-mcp-server
-```
-
-### Option C: Clone & build (for development)
-
-```bash
-git clone https://github.com/monsterygy/oracle-mcp-server.git
-cd oracle-mcp-server
-npm install
-npm run build
-npm start
-```
-
----
-
-## Integrate with MCP Clients
-
-### WorkBuddy / ccswitch (npx — no local files needed)
-
-Add to `~/.workbuddy/mcp.json` (or your client's MCP config):
+MCP 客户端配置（同事拿到这段 JSON 填上账号密码即可）：
 
 ```json
 {
   "mcpServers": {
     "oracle-db": {
       "command": "npx",
-      "args": ["-y", "gy-oracle-database-mcp-server"],
+      "args": ["-y", "github:monsterygy/oracle-mcp-server"],
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
+      }
+    }
+  }
+}
+```
+
+> 首次启动会从 GitHub 下载并自动编译（约 30 秒），之后使用缓存秒启。
+
+### 方式二：离线 Tarball（适合内网/无外网环境）
+
+**打包**（你执行一次，生成 `.tgz` 文件）：
+
+```bash
+cd database-mcp-server
+npm pack
+# → 生成 gy-oracle-database-mcp-server-3.1.0.tgz（约 45KB）
+```
+
+**安装**（同事拿到 `.tgz` 文件后执行）：
+
+```bash
+npm install -g gy-oracle-database-mcp-server-3.1.0.tgz
+# → 全局安装，gy-oracle-mcp-server 命令可用
+```
+
+MCP 客户端配置（使用全局安装的命令，无需 npx）：
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "gy-oracle-mcp-server",
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
+      }
+    }
+  }
+}
+```
+
+### 方式三：Clone & Build（开发调试用）
+
+```bash
+git clone https://github.com/monsterygy/oracle-mcp-server.git
+cd oracle-mcp-server
+npm install      # prepare 脚本自动 build
+npm start
+```
+
+本地路径方式配置：
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "node",
+      "args": ["/absolute/path/to/oracle-mcp-server/dist/index.js"],
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Integrate with MCP Clients
+
+### WorkBuddy / ccswitch
+
+Add to `~/.workbuddy/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "npx",
+      "args": ["-y", "github:monsterygy/oracle-mcp-server"],
       "env": {
         "ORACLE_USER": "hr",
         "ORACLE_PASSWORD": "yourpass",
@@ -111,7 +170,7 @@ Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claud
   "mcpServers": {
     "oracle-db": {
       "command": "npx",
-      "args": ["-y", "gy-oracle-database-mcp-server"],
+      "args": ["-y", "github:monsterygy/oracle-mcp-server"],
       "env": {
         "ORACLE_USER": "hr",
         "ORACLE_PASSWORD": "yourpass",
@@ -131,27 +190,7 @@ Add to `.cursor/mcp.json` or VS Code MCP settings:
   "mcpServers": {
     "oracle-db": {
       "command": "npx",
-      "args": ["-y", "gy-oracle-database-mcp-server"],
-      "env": {
-        "ORACLE_USER": "hr",
-        "ORACLE_PASSWORD": "yourpass",
-        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
-      }
-    }
-  }
-}
-```
-
-### Local build path (alternative to npx)
-
-If you've cloned and built locally:
-
-```json
-{
-  "mcpServers": {
-    "oracle-db": {
-      "command": "node",
-      "args": ["/absolute/path/to/oracle-mcp-server/dist/index.js"],
+      "args": ["-y", "github:monsterygy/oracle-mcp-server"],
       "env": {
         "ORACLE_USER": "hr",
         "ORACLE_PASSWORD": "yourpass",
@@ -165,7 +204,7 @@ If you've cloned and built locally:
 ### Debug with MCP Inspector
 
 ```bash
-npx @modelcontextprotocol/inspector npx gy-oracle-database-mcp-server
+npx @modelcontextprotocol/inspector npx -y github:monsterygy/oracle-mcp-server
 ```
 
 Or with a local clone:
@@ -358,7 +397,7 @@ node scripts/test-mcp.mjs list
 ### 4. MCP Inspector (interactive GUI)
 
 ```bash
-npx @modelcontextprotocol/inspector npx gy-oracle-database-mcp-server
+npx @modelcontextprotocol/inspector npx -y github:monsterygy/oracle-mcp-server
 ```
 
 Opens a web UI at `http://localhost:5173` where you can:
@@ -384,7 +423,8 @@ oracle-mcp-server/
 │       └── security.test.ts  # 42 unit tests
 ├── scripts/
 │   ├── test-offline.mjs   # 15 offline protocol tests (no DB)
-│   └── test-mcp.mjs       # End-to-end tests (requires DB)
+│   ├── test-mcp.mjs       # End-to-end tests (requires DB)
+│   └── test-github-npx.mjs # GitHub npx verification test
 ├── Dockerfile             # Multi-stage build
 ├── docker-compose.yml    # Oracle XE + MCP server
 ├── .eslintrc.json        # Code quality rules
@@ -392,14 +432,21 @@ oracle-mcp-server/
 └── package.json
 ```
 
-## Publishing (for maintainers)
+## Local Sharing (npm pack)
+
+Generate a shareable tarball for colleagues (no npm registry needed):
 
 ```bash
-npm run build
-npm publish
+npm pack
+# → gy-oracle-database-mcp-server-3.1.0.tgz (≈45KB)
 ```
 
-The `prepublishOnly` script automatically runs clean → build → test → test:offline before publishing.
+Colleagues install it:
+
+```bash
+npm install -g gy-oracle-database-mcp-server-3.1.0.tgz
+# → gy-oracle-mcp-server 命令全局可用
+```
 
 ## License
 
