@@ -1,14 +1,23 @@
 {
-  "name": "oracle-database-mcp-server",
-  "version": "3.0.0",
+  "name": "gy-oracle-database-mcp-server",
+  "version": "3.1.0",
   "description": "Production-grade MCP server for Oracle database with full CRUD, transactions, execution plans, and comprehensive safety guardrails",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "gy-oracle-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    ".env.example"
+  ],
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test && npm run test:offline",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -20,6 +29,30 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "oracle",
+    "oracle-database",
+    "database",
+    "sql",
+    "ai",
+    "llm",
+    "claude",
+    "cursor",
+    "stdio"
+  ],
+  "author": "monsterygy",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monsterygy/oracle-mcp-server.git"
+  },
+  "homepage": "https://github.com/monsterygy/oracle-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/monsterygy/oracle-mcp-server/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.1",

@@ -2,6 +2,8 @@
 
 A production-grade [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Oracle database interaction, providing 11 tools for full CRUD, transactions, execution plans, and comprehensive safety guardrails.
 
+> **npx ready** — No clone, no build. Just `npx gy-oracle-database-mcp-server` and you're connected.
+
 ## Features
 
 ### 11 Tools
@@ -36,51 +38,155 @@ A production-grade [Model Context Protocol](https://modelcontextprotocol.io/) (M
 - **SQL injection prevention** — Parameterized binds, identifier validation, multi-statement blocking
 - **Unit tested** — 42 tests covering all security boundary functions
 
-## Quick Start
+---
 
-### Prerequisites
+## Quick Start (npx — zero setup)
 
-- Node.js 18+
-- Oracle Database 12.1+ (for thin mode) or 11g+ (for thick mode with Instant Client)
-
-### Install & Build
+### Option A: npx (recommended, no install needed)
 
 ```bash
-cd database-mcp-server
+npx gy-oracle-database-mcp-server
+```
+
+That's it. npx automatically downloads, builds, and runs the server. Pass Oracle credentials via environment variables:
+
+```bash
+ORACLE_USER=hr \
+ORACLE_PASSWORD=yourpass \
+ORACLE_CONNECT_STRING=localhost:1521/ORCLPDB1 \
+npx gy-oracle-database-mcp-server
+```
+
+### Option B: Global install
+
+```bash
+npm install -g gy-oracle-database-mcp-server
+gy-oracle-mcp-server
+```
+
+### Option C: Clone & build (for development)
+
+```bash
+git clone https://github.com/monsterygy/oracle-mcp-server.git
+cd oracle-mcp-server
 npm install
 npm run build
+npm start
 ```
 
-### Configure
+---
+
+## Integrate with MCP Clients
+
+### WorkBuddy / ccswitch (npx — no local files needed)
+
+Add to `~/.workbuddy/mcp.json` (or your client's MCP config):
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "npx",
+      "args": ["-y", "gy-oracle-database-mcp-server"],
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1",
+        "LOG_LEVEL": "INFO",
+        "DML_MAX_ROWS": "1000"
+      }
+    }
+  }
+}
+```
+
+After saving, open the connector management page and click **Trust** to enable.
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "npx",
+      "args": ["-y", "gy-oracle-database-mcp-server"],
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
+      }
+    }
+  }
+}
+```
+
+### Cursor / VS Code (with MCP support)
+
+Add to `.cursor/mcp.json` or VS Code MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "npx",
+      "args": ["-y", "gy-oracle-database-mcp-server"],
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
+      }
+    }
+  }
+}
+```
+
+### Local build path (alternative to npx)
+
+If you've cloned and built locally:
+
+```json
+{
+  "mcpServers": {
+    "oracle-db": {
+      "command": "node",
+      "args": ["/absolute/path/to/oracle-mcp-server/dist/index.js"],
+      "env": {
+        "ORACLE_USER": "hr",
+        "ORACLE_PASSWORD": "yourpass",
+        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
+      }
+    }
+  }
+}
+```
+
+### Debug with MCP Inspector
 
 ```bash
-cp .env.example .env
-# Edit .env with your Oracle connection details
+npx @modelcontextprotocol/inspector npx gy-oracle-database-mcp-server
 ```
 
-Minimum required environment variables:
+Or with a local clone:
+
+```bash
+npm run inspector
+```
+
+---
+
+## Configuration
+
+All configuration is managed via environment variables. See `.env.example` for the full list.
+
+### Minimum Required
 
 ```env
 ORACLE_USER=hr
 ORACLE_PASSWORD=your_password
 ORACLE_CONNECT_STRING=localhost:1521/ORCLPDB1
 ```
-
-### Run
-
-```bash
-npm start
-```
-
-### Debug with MCP Inspector
-
-```bash
-npm run inspector
-```
-
-## Configuration
-
-All configuration is managed centrally by `src/config.ts`. See `.env.example` for the full list of options.
 
 ### Connection Methods
 
@@ -147,6 +253,7 @@ docker-compose up -d
 ```
 
 This starts:
+
 - Oracle XE 21c (gvenzl/oracle-xe:21-slim) on port 1521
 - MCP server connected to the Oracle XE instance
 
@@ -160,30 +267,6 @@ docker run -i --rm \
   -e ORACLE_CONNECT_STRING=your-host:1521/your-service \
   oracle-mcp-server
 ```
-
-## WorkBuddy Integration
-
-Add to `~/.workbuddy/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "oracle-db": {
-      "command": "node",
-      "args": ["/path/to/database-mcp-server/dist/index.js"],
-      "env": {
-        "ORACLE_USER": "hr",
-        "ORACLE_PASSWORD": "yourpass",
-        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1",
-        "LOG_LEVEL": "INFO",
-        "DML_MAX_ROWS": "1000"
-      }
-    }
-  }
-}
-```
-
-After saving, open the connector management page and click **Trust** to enable.
 
 ## Security Architecture
 
@@ -240,6 +323,7 @@ npm run test:offline
 ```
 
 This launches the MCP server with fake credentials and verifies:
+
 - JSON-RPC `initialize` handshake succeeds
 - `tools/list` returns all 11 tools with `inputSchema`
 - `db_query` rejects INSERT/DROP/multi-statement injection
@@ -271,66 +355,28 @@ node scripts/test-mcp.mjs db_query "SELECT * FROM dual"
 node scripts/test-mcp.mjs list
 ```
 
-The e2e tests cover all 11 tools with real database calls, including:
-- `db_health_check` — driver version, connection status, pool stats
-- `db_list_tns` — tnsnames.ora parsing
-- `db_session_info` — connected user, schema, SID, NLS format
-- `db_list_tables` — all tables in the database
-- `db_query` — `SELECT * FROM dual` and multi-column queries
-- `db_describe_table` — column schema of `ALL_USERS`
-- `db_explain_plan` — execution plan without executing
-- `db_insert` / `db_update` / `db_delete` — dry-run mode (no data modification)
-- `db_transaction` — multi-step atomic transaction (expects graceful failure if no matching table)
-
 ### 4. MCP Inspector (interactive GUI)
 
-Visual debugging tool for MCP servers — inspect tool schemas, test calls interactively.
-
 ```bash
-npm run inspector
+npx @modelcontextprotocol/inspector npx gy-oracle-database-mcp-server
 ```
 
 Opens a web UI at `http://localhost:5173` where you can:
+
 - View all 11 tool schemas
 - Call any tool with custom parameters
 - See raw JSON-RPC request/response
 - Debug connection issues
 
-### 5. WorkBuddy Integration Test
-
-After adding the MCP config to `~/.workbuddy/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "oracle-db": {
-      "command": "node",
-      "args": ["/absolute/path/to/database-mcp-server/dist/index.js"],
-      "env": {
-        "ORACLE_USER": "hr",
-        "ORACLE_PASSWORD": "yourpass",
-        "ORACLE_CONNECT_STRING": "localhost:1521/ORCLPDB1"
-      }
-    }
-  }
-}
-```
-
-Open the connector management page → click **Trust** on the new server. Then in WorkBuddy chat, try:
-- "List all tables in my Oracle database"
-- "Describe the USERS table schema"
-- "Query the first 10 rows from the orders table"
-- "Insert a test record into the logs table" (with dry_run, the LLM will preview first)
-
 ## Project Structure
 
 ```
-database-mcp-server/
+oracle-mcp-server/
 ├── src/
 │   ├── config.ts          # Centralized config validation
 │   ├── logger.ts          # Structured logging with request IDs
 │   ├── errors.ts          # Custom error types with codes
-│   ├── rateLimiter.ts    # Sliding window rate limiter
+│   ├── rateLimiter.ts     # Sliding window rate limiter
 │   ├── security.ts        # Pure security functions (unit-tested)
 │   ├── db.ts              # Oracle connection pool & query execution
 │   ├── index.ts           # MCP server & tool registration
@@ -340,11 +386,20 @@ database-mcp-server/
 │   ├── test-offline.mjs   # 15 offline protocol tests (no DB)
 │   └── test-mcp.mjs       # End-to-end tests (requires DB)
 ├── Dockerfile             # Multi-stage build
-├── docker-compose.yml     # Oracle XE + MCP server
-├── .eslintrc.json         # Code quality rules
-├── .env.example           # Configuration template
+├── docker-compose.yml    # Oracle XE + MCP server
+├── .eslintrc.json        # Code quality rules
+├── .env.example          # Configuration template
 └── package.json
 ```
+
+## Publishing (for maintainers)
+
+```bash
+npm run build
+npm publish
+```
+
+The `prepublishOnly` script automatically runs clean → build → test → test:offline before publishing.
 
 ## License
 

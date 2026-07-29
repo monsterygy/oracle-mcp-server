@@ -177,8 +177,8 @@ export function loadConfig(): AppConfig {
     },
 
     server: {
-      name: "oracle-database-mcp-server",
-      version: "3.0.0",
+      name: "gy-oracle-database-mcp-server",
+      version: "3.1.0",
     },
   };
 
