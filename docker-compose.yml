@@ -1,0 +1,59 @@
+# ================================================================
+# Docker Compose for Oracle MCP Server + Oracle XE
+# ================================================================
+# Usage:
+#   docker-compose up -d oracle-xe    # Start Oracle XE first
+#   docker-compose up -d mcp-server   # Then start the MCP server
+#
+# Oracle XE credentials:
+#   - System password: MyDbPass123
+#   - PDB: XEPDB1
+#   - Port: 1521
+
+services:
+  oracle-xe:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-xe
+    environment:
+      ORACLE_PASSWORD: MyDbPass123
+      ORACLE_DATABASE: XEPDB1
+      APP_USER: mcp
+      APP_USER_PASSWORD: McpPass123
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oracle-mcp-server
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+    environment:
+      ORACLE_USER: mcp
+      ORACLE_PASSWORD: McpPass123
+      ORACLE_CONNECT_STRING: oracle-xe:1521/XEPDB1
+      LOG_LEVEL: INFO
+      LOG_JSON: "true"
+      DB_POOL_MAX: "5"
+      QUERY_MAX_ROWS: "200"
+      DML_MAX_ROWS: "500"
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_PER_MINUTE: "60"
+      READ_ONLY_MODE: "false"
+      # ALLOWED_TABLES: USERS,ORDERS,PRODUCTS    # Whitelist (comma-separated, uppercase)
+      # BLOCKED_TABLES: SECRET_CONFIG            # Blacklist
+    stdin_open: true
+    tty: true
+
+volumes:
+  oracle-data:

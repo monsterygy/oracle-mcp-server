@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+
+# Oracle wallet files
+*.p12
+*.jks
+ewallet.p12
+cwallet.sso
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Lock files (keep package-lock.json, ignore others)
+yarn.lock
+pnpm-lock.yaml

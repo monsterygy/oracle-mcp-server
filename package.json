@@ -1,0 +1,40 @@
+{
+  "name": "oracle-database-mcp-server",
+  "version": "3.0.0",
+  "description": "Production-grade MCP server for Oracle database with full CRUD, transactions, execution plans, and comprehensive safety guardrails",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:offline": "node scripts/test-offline.mjs",
+    "test:e2e": "node scripts/test-mcp.mjs",
+    "lint": "eslint src/ --ext .ts",
+    "lint:fix": "eslint src/ --ext .ts --fix",
+    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "oracledb": "^6.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/oracledb": "^7.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "rimraf": "^5.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.0.0"
+  }
+}
