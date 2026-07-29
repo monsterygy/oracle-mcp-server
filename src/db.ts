@@ -80,6 +80,12 @@ oracledb.fetchAsString = [
 const config = getConfig();
 const logger = getLogger();
 
+// Validate default schema at startup (fail fast if invalid)
+if (config.oracle.schema) {
+  validateIdentifier(config.oracle.schema);
+  logger.info(`Default schema set to ${config.oracle.schema.toUpperCase()}`);
+}
+
 // Determine driver mode
 // In oracledb 6.x, thin mode is the default (pure JS, no Oracle Client needed).
 // If thick mode is requested, initOracledb must be called with libDir.
@@ -197,11 +203,20 @@ async function createPool(): Promise<oracledb.Pool> {
  */
 async function getConnection(): Promise<oracledb.Connection> {
   const p = await getPool();
+  const cfg = getConfig();
   const maxRetries = 2;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const conn = await p.getConnection();
+
+      // Set default schema if configured (ALTER SESSION SET CURRENT_SCHEMA)
+      if (cfg.oracle.schema) {
+        await conn.execute(
+          `ALTER SESSION SET CURRENT_SCHEMA = ${cfg.oracle.schema.toUpperCase()}`
+        );
+      }
+
       return conn;
     } catch (error) {
       if (isTransientError(error) && attempt < maxRetries) {

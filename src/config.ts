@@ -24,6 +24,8 @@ export interface AppConfig {
     tnsAdmin?: string;
     /** ORACLE_HOME (fallback for tnsnames.ora search) */
     oracleHome?: string;
+    /** Default schema (sets CURRENT_SCHEMA on every connection) */
+    schema?: string;
   };
 
   /** Connection pool */
@@ -135,6 +137,7 @@ export function loadConfig(): AppConfig {
       libDir: process.env.ORACLE_CLIENT_DIR || undefined,
       tnsAdmin: process.env.TNS_ADMIN || undefined,
       oracleHome: process.env.ORACLE_HOME || undefined,
+      schema: process.env.ORACLE_SCHEMA || undefined,
     },
 
     pool: {
