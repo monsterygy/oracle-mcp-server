@@ -8,6 +8,8 @@
  * - validateIdentifier: blocks SQL injection via identifier names
  * - isTableAllowed: whitelist/blacklist enforcement
  * - IDENTIFIER_REGEX: basic identifier validation
+ * - assertSafeBindValues: big-number (> 2^53) bind precision guard
+ * - buildRowidSelectSql: ROWID-based row fetch SQL
  */
 
 import { describe, it, expect } from "vitest";
@@ -18,6 +20,9 @@ import {
   parseTnsAliasesContent,
   validateIdentifier,
   isTableAllowed,
+  BIND_MAX_SAFE_INTEGER,
+  assertSafeBindValues,
+  buildRowidSelectSql,
 } from "../security.js";
 
 // ================================================================
@@ -327,3 +332,99 @@ describe("isTableAllowed", () => {
     });
   });
 });
+// ================================================================
+// assertSafeBindValues — big-number (> 2^53) bind precision guard
+// ================================================================
+describe("assertSafeBindValues", () => {
+  it("does not throw for safe primitive binds", () => {
+    expect(() => assertSafeBindValues([1, 2, 3], "p")).not.toThrow();
+    expect(() => assertSafeBindValues(["9007199254740993", 42, true, null], "p")).not.toThrow();
+    expect(() => assertSafeBindValues([1.5, -0.25, 0], "p")).not.toThrow();
+    expect(() => assertSafeBindValues({ a: 1, b: "x" }, "p")).not.toThrow();
+    expect(() => assertSafeBindValues([], "p")).not.toThrow();
+    expect(() => assertSafeBindValues(null, "p")).not.toThrow();
+    expect(() => assertSafeBindValues(undefined, "p")).not.toThrow();
+  });
+
+  it("accepts the exact safe integer boundary (2^53 - 1)", () => {
+    expect(() => assertSafeBindValues([BIND_MAX_SAFE_INTEGER], "p")).not.toThrow();
+    expect(() => assertSafeBindValues([-BIND_MAX_SAFE_INTEGER], "p")).not.toThrow();
+    expect(BIND_MAX_SAFE_INTEGER).toBe(9007199254740991);
+  });
+
+  it("rejects integers beyond 2^53 - 1 (silent precision loss)", () => {
+    const unsafe = BIND_MAX_SAFE_INTEGER + 1; // 9007199254740992 — already rounded by JS
+    expect(() => assertSafeBindValues([unsafe], "db_query params")).toThrow(/Unsafe numeric bind value/);
+    expect(() => assertSafeBindValues([1, unsafe], "db_query params")).toThrow(/\[1\]/);
+    expect(() => assertSafeBindValues([-unsafe], "db_query params")).toThrow(/Unsafe numeric bind value/);
+  });
+
+  it("rejects unsafe integers inside named-bind records with the key name", () => {
+    expect(() =>
+      assertSafeBindValues({ w_1: BIND_MAX_SAFE_INTEGER + 1 }, "db_delete where_params")
+    ).toThrow(/"/);
+    expect(() =>
+      assertSafeBindValues({ s_id: 7, w_1: BIND_MAX_SAFE_INTEGER + 1 }, "db_update data + where_params")
+    ).toThrow(/w_1/);
+  });
+
+  it("rejects NaN and infinities", () => {
+    expect(() => assertSafeBindValues([NaN], "p")).toThrow(/not a finite number/);
+    expect(() => assertSafeBindValues([Infinity], "p")).toThrow(/not a finite number/);
+    expect(() => assertSafeBindValues([-Infinity], "p")).toThrow(/not a finite number/);
+    expect(() => assertSafeBindValues({ a: Infinity }, "p")).toThrow(/not a finite number/);
+  });
+
+  it("accepts big integers passed as strings (the documented workaround)", () => {
+    expect(() => assertSafeBindValues(["9007199254740993"], "p")).not.toThrow();
+    expect(() => assertSafeBindValues({ id: "9007199254740993" }, "p")).not.toThrow();
+  });
+
+  it("accepts oracledb bind-definition objects with safe values", () => {
+    expect(() => assertSafeBindValues([{ val: 42, type: 2016 }], "p")).not.toThrow();
+    expect(() => assertSafeBindValues({ id: { val: "9007199254740993", type: 2016 } }, "p")).not.toThrow();
+  });
+
+  it("inspects the inner val of oracledb bind-definition objects", () => {
+    expect(() => assertSafeBindValues([{ val: BIND_MAX_SAFE_INTEGER + 1, type: 2016 }], "p")).toThrow(/Unsafe numeric bind value/);
+  });
+
+  it("reports every offender, not just the first", () => {
+    expect(() =>
+      assertSafeBindValues([1, BIND_MAX_SAFE_INTEGER + 1, 2, BIND_MAX_SAFE_INTEGER + 2], "p")
+    ).toThrow(/\[1\].*\[3\]/s);
+  });
+
+  it("throws a ValidationError with a string-passing hint", () => {
+    try {
+      assertSafeBindValues([BIND_MAX_SAFE_INTEGER + 1], "p");
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      const e = err as { code?: string; hint?: string; message: string };
+      expect(e.code).toBe("BIND_PRECISION_ERROR");
+      expect(e.hint).toContain("Pass big integers as strings");
+      expect(e.message).toContain("9007199254740992");
+    }
+  });
+});
+
+// ================================================================
+// buildRowidSelectSql — ROWID-based row fetch SQL
+// ================================================================
+describe("buildRowidSelectSql", () => {
+  it("builds a ROWID select for a valid table name", () => {
+    expect(buildRowidSelectSql("users")).toBe("SELECT * FROM USERS WHERE ROWID = :rowid_val");
+  });
+
+  it("uppercases the table name like other SQL builders", () => {
+    expect(buildRowidSelectSql("order_items")).toBe("SELECT * FROM ORDER_ITEMS WHERE ROWID = :rowid_val");
+    expect(buildRowidSelectSql("USERS")).toBe("SELECT * FROM USERS WHERE ROWID = :rowid_val");
+  });
+
+  it("rejects invalid table names (identifier validation)", () => {
+    expect(() => buildRowidSelectSql("1table")).toThrow();
+    expect(() => buildRowidSelectSql("users; DROP TABLE users")).toThrow();
+    expect(() => buildRowidSelectSql("user name")).toThrow();
+  });
+});
+

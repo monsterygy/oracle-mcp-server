@@ -39,6 +39,9 @@ export {
   isReadOnlyQuery,
   applyRowLimit,
   validateIdentifier,
+  BIND_MAX_SAFE_INTEGER,
+  assertSafeBindValues,
+  buildRowidSelectSql,
 } from "./security.js";
 import {
   IDENTIFIER_REGEX,
@@ -46,6 +49,8 @@ import {
   applyRowLimit,
   validateIdentifier,
   parseTnsAliasesContent,
+  assertSafeBindValues,
+  buildRowidSelectSql,
 } from "./security.js";
 
 // ================================================================
@@ -449,6 +454,9 @@ export async function executeReadOnlyQuery(
     );
   }
 
+  // Precision guard: reject numeric binds beyond 2^53 before they reach Oracle
+  assertSafeBindValues(params, "db_query params");
+
   const connection = await getConnection();
 
   try {
@@ -494,6 +502,9 @@ export async function executeWriteQuery(
   checkDmlAllowed();
   const cfg = getConfig();
 
+  // Precision guard: reject numeric binds beyond 2^53 before they reach Oracle
+  assertSafeBindValues(params, "DML binds");
+
   if (options.dryRun) {
     return { rowsAffected: 0, dryRun: true, sql };
   }
@@ -524,6 +535,10 @@ export async function executeInsertAndReturn(
 ): Promise<{ row: Record<string, unknown> | null; rowsAffected: number }> {
   checkDmlAllowed();
   const cfg = getConfig();
+
+  // Precision guard: reject numeric binds beyond 2^53 before they reach Oracle
+  assertSafeBindValues(binds, "db_insert binds");
+
   const connection = await getConnection();
 
   try {
@@ -539,7 +554,7 @@ export async function executeInsertAndReturn(
 
     let insertedRow: Record<string, unknown> | null = null;
     if (rowid) {
-      const selectSql = `SELECT * FROM ${tableName} WHERE ROWID = :rowid_val`;
+      const selectSql = buildRowidSelectSql(tableName);
       const rowResult = await connection.execute(selectSql, {
         rowid_val: rowid,
       });
@@ -567,6 +582,10 @@ export async function countMatchingRows(
   whereClause: string,
   whereParams: oracledb.BindParameters
 ): Promise<number> {
+
+  // Precision guard: reject numeric binds beyond 2^53 before they reach Oracle
+  assertSafeBindValues(whereParams, "WHERE binds");
+
   const connection = await getConnection();
 
   try {
@@ -635,6 +654,11 @@ export async function executeInTransaction(
     );
   }
 
+  // Precision guard: reject numeric binds beyond 2^53 in every step
+  for (const step of steps) {
+    assertSafeBindValues(step.params, "transaction step binds");
+  }
+
   const connection = await getConnection();
   const results: { rowsAffected: number; sql: string }[] = [];
 
@@ -675,6 +699,9 @@ export async function getExplainPlan(sql: string, params: unknown[] = []): Promi
   if (!isReadOnlyQuery(sql)) {
     throw new ValidationError("Explain plan is only available for SELECT/WITH queries.");
   }
+
+  // Precision guard: reject numeric binds beyond 2^53 before they reach Oracle
+  assertSafeBindValues(params, "db_explain_plan params");
 
   const connection = await getConnection();
   const stmtId = Math.floor(Math.random() * 1000000);

@@ -61,6 +61,7 @@ import {
   checkTableAccess,
   checkDmlAllowed,
   isReadOnlyQuery,
+  assertSafeBindValues,
   oracledb,
   type TransactionStep,
 } from "./db.js";
@@ -433,6 +434,8 @@ server.registerTool(
 
 **IMPORTANT**: Always use Oracle bind variables (:1, :2, ...) instead of string interpolation to prevent SQL injection.
 
+**Big numbers**: integers beyond 2^53 - 1 (9007199254740991) MUST be passed as strings (e.g. "9007199254740993") — JS numbers silently lose precision and corrupt the query. The server rejects unsafe numeric binds with BIND_PRECISION_ERROR.
+
 Example:
   sql: "SELECT * FROM users WHERE active = :1 AND created_at > :2"
   params: ["Y", "2024-01-01"]
@@ -571,6 +574,8 @@ server.registerTool(
 
 Auto-generates an INSERT with named bind variables from the provided data object. Column names are validated to prevent SQL injection. After insert, the full row is fetched back via ROWID.
 
+**Big numbers**: integers beyond 2^53 - 1 (9007199254740991) MUST be passed as strings (e.g. "9007199254740993") — JS numbers silently lose precision.
+
 **dry_run mode**: Set dry_run=true to preview the generated SQL without executing it.
 
 Example:
@@ -609,6 +614,9 @@ Args:
     for (const col of columns) {
       binds[col] = data[col];
     }
+
+    // Precision guard: reject numeric binds beyond 2^53 (covers dry_run too)
+    assertSafeBindValues(binds, "db_insert data");
 
     const sql = `INSERT INTO ${table_name.toUpperCase()} (${columnList}) VALUES (${placeholders})`;
 
@@ -670,6 +678,8 @@ Auto-generates the SET clause from the data object. The WHERE clause MUST includ
   - Pre-counts matching rows and refuses if exceeding DML_MAX_ROWS (default: 1000)
   - dry_run mode previews SQL + affected row count
 
+**Big numbers**: integers beyond 2^53 - 1 (9007199254740991) MUST be passed as strings (e.g. "9007199254740993") — JS numbers silently lose precision.
+
 Example:
   table_name: "users"
   data: { "status": "active" }
@@ -708,6 +718,9 @@ Args:
     for (let i = 0; i < where_params.length; i++) {
       binds[`w_${i + 1}`] = where_params[i];
     }
+
+    // Precision guard: reject numeric binds beyond 2^53 (covers dry_run too)
+    assertSafeBindValues(binds, "db_update data + where_params");
 
     const sql = `UPDATE ${table_name.toUpperCase()} SET ${setClause} WHERE ${where}`;
 
@@ -774,6 +787,8 @@ server.registerTool(
   - Pre-counts matching rows and refuses if exceeding DML_MAX_ROWS (default: 1000)
   - dry_run mode previews SQL + affected row count
 
+**Big numbers**: integers beyond 2^53 - 1 (9007199254740991) MUST be passed as strings (e.g. "9007199254740993") — JS numbers silently lose precision.
+
 Example:
   table_name: "users"
   where: "id = :w_1 AND status = :w_2"
@@ -796,6 +811,9 @@ Example:
     for (let i = 0; i < where_params.length; i++) {
       binds[`w_${i + 1}`] = where_params[i];
     }
+
+    // Precision guard: reject numeric binds beyond 2^53 (covers dry_run too)
+    assertSafeBindValues(binds, "db_delete where_params");
 
     const sql = `DELETE FROM ${table_name.toUpperCase()} WHERE ${where}`;
 
@@ -858,6 +876,8 @@ server.registerTool(
 All steps either succeed and commit together, or fail and roll back together. This ensures data consistency for multi-step operations.
 
 **Limits**: 1-10 steps per transaction. Each step must use Oracle bind variables (:1, :2, ...) — never string interpolation.
+
+**Big numbers**: integers beyond 2^53 - 1 (9007199254740991) MUST be passed as strings (e.g. "9007199254740993") — JS numbers silently lose precision.
 
 Example:
   steps: [

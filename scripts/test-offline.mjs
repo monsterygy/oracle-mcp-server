@@ -278,6 +278,53 @@ test("db_insert dry_run returns SQL without executing", async (client) => {
   return "Dry-run correctly returned generated SQL without executing";
 });
 
+// --- Safety: big-number bind precision guard (no DB needed — guard fires first) ---
+
+test("db_query rejects numeric bind beyond 2^53 (precision guard)", async (client) => {
+  const result = await client.callTool("db_query", {
+    sql: "SELECT * FROM users WHERE id = :1",
+    params: [9007199254740992], // 2^53 — silently rounds to 9007199254740992 in JS, corrupts data
+    max_rows: 10,
+  });
+  if (!result.isError) throw new Error("Expected isError=true for unsafe numeric bind");
+  const text = result.content?.[0]?.text ?? "";
+  if (!text.includes("Unsafe numeric bind")) {
+    throw new Error(`Expected BIND_PRECISION_ERROR, got: ${text.slice(0, 300)}`);
+  }
+  return "Correctly rejected big-number bind (would silently lose precision)";
+});
+
+test("db_insert dry_run rejects big-number bind (precision guard)", async (client) => {
+  const result = await client.callTool("db_insert", {
+    table_name: "TEST_TABLE",
+    data: { id: 9007199254740992, name: "test" },
+    dry_run: true,
+  });
+  if (!result.isError) throw new Error("Expected isError=true for unsafe numeric bind in dry_run");
+  const text = result.content?.[0]?.text ?? "";
+  if (!text.includes("Unsafe numeric bind")) {
+    throw new Error(`Expected BIND_PRECISION_ERROR, got: ${text.slice(0, 300)}`);
+  }
+  return "Correctly rejected big-number bind even in dry_run";
+});
+
+test("string-form big-number bind passes the precision guard", async (client) => {
+  // The guard accepts strings (documented workaround); the call then fails only
+  // on the fake DB connection — never on a precision error.
+  const result = await client.callTool("db_update", {
+    table_name: "users",
+    data: { status: "fixed" },
+    where: "id = :w_1",
+    where_params: ["9007199254740993"],
+    dry_run: true,
+  });
+  const text = result.content?.[0]?.text ?? "";
+  if (text.includes("Unsafe numeric bind")) {
+    throw new Error(`String bind wrongly rejected: ${text.slice(0, 300)}`);
+  }
+  return "String-form big-number bind passes the precision guard";
+});
+
 // --- Safety: max_rows validation ---
 
 test("db_query rejects max_rows > 500 (Zod)", async (client) => {

@@ -31,7 +31,7 @@ npm run inspector
 
 ## 方式二：离线协议测试（无需数据库）
 
-验证 MCP 协议握手 + 安全防线（15 个测试）：
+验证 MCP 协议握手 + 安全防线（18 个测试，新增 bind 精度守卫用例）：
 
 ```bash
 npm run test:offline
@@ -45,8 +45,21 @@ npm run test:offline
 ✅ 4/15  db_query rejects DROP TABLE
 ✅ 5/15  db_query rejects multi-statement injection
 ...
-✅ 15/15 db_update requires WHERE clause
-Result: 15/15 passed
+✅ 16/18 db_query rejects numeric bind beyond 2^53 (precision guard)
+✅ 17/18 db_insert dry_run rejects big-number bind (precision guard)
+✅ 18/18 string-form big-number bind passes the precision guard
+Result: 18/18 passed
+```
+
+---
+
+## 单元测试（无需数据库）
+
+覆盖全部安全边界函数（55 个用例），含 bind 精度守卫（> 2^53 数字 bind 拒绝 +
+字符串传值通过）与 ROWID 取数 SQL 生成：
+
+```bash
+npm test
 ```
 
 ---

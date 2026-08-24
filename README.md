@@ -36,7 +36,9 @@ A production-grade [Model Context Protocol](https://modelcontextprotocol.io/) (M
 - **Dry-run mode** — Preview generated SQL without executing for INSERT/UPDATE/DELETE
 - **Oracle type conversion** — DATE, TIMESTAMP, CLOB, BLOB → JSON-serializable values
 - **SQL injection prevention** — Parameterized binds, identifier validation, multi-statement blocking
-- **Unit tested** — 42 tests covering all security boundary functions
+- **Big-number precision guard** — Rejects numeric binds beyond 2^53 - 1 (silent JS precision loss); pass big integers as strings instead
+- **ROWID-based insert fetch** — `db_insert` returns the inserted row via ROWID, immune to big-number key corruption
+- **Unit tested** — 55 unit tests + 18 offline protocol tests covering all security boundary functions
 
 ---
 
@@ -324,10 +326,59 @@ Request → [Rate Limiter] → [Zod Input Validation] → [Identifier Validation
 | Read-only enforcement | Regex check for SELECT/WITH only | DML/DDL in db_query |
 | Multi-statement blocking | Semicolon detection | Statement injection |
 | Parameterized binds | `:1, :2` / named binds | SQL injection in values |
+| Bind precision guard | `assertSafeBindValues` (BIND_PRECISION_ERROR) | Silent data corruption for numeric binds beyond 2^53 - 1 |
 | DML safety cap | Pre-count + `DML_MAX_ROWS` | Mass UPDATE/DELETE |
 | Query timeout | `Promise.race` with timer | Slow queries |
 | Row limit | `FETCH FIRST n ROWS ONLY` | Result set overflow |
 | Rate limiting | Sliding window | Abuse / DoS |
+
+### Big-Number Precision Guard (bind safety)
+
+JavaScript numbers are IEEE-754 doubles — any integer with an absolute value above
+2^53 - 1 (9007199254740991) is silently rounded to the nearest representable value
+**before it ever reaches Oracle**. Oracle `NUMBER` keeps up to 38 decimal digits
+exact, so a bind like `9007199254740993` arrives as `9007199254740992` and corrupts
+the data.
+
+The server enforces a **bind precision guard** (`assertSafeBindValues`) on every tool
+that accepts bind values (`db_query`, `db_insert`, `db_update`, `db_delete`,
+`db_transaction`, `db_explain_plan`). Unsafe numeric binds are rejected with error
+code `BIND_PRECISION_ERROR` instead of being sent to the database.
+
+**The fix**: pass big integers as strings — Oracle converts them to `NUMBER` with
+full precision:
+
+```jsonc
+// ❌ silently corrupts: 9007199254740992 is written
+{ "id": 9007199254740993 }
+
+// ✅ exact: Oracle stores 9007199254740993
+{ "id": "9007199254740993" }
+```
+
+### ROWID Usage
+
+`db_insert` fetches the inserted row back via **ROWID** (`result.lastRowid`), the
+physical row locator Oracle assigns to the newly inserted row:
+
+```sql
+SELECT * FROM <TABLE> WHERE ROWID = :rowid_val
+```
+
+Fetching by ROWID is the only reliable way to return the exact row just inserted —
+re-selecting by a numeric key is unsafe when the key exceeds 2^53 (see the precision
+guard above).
+
+**ROWID caveats** (so repairs are never built on false assumptions):
+
+- ROWID is a physical locator, not a logical key — it can change after
+  `ALTER TABLE ... MOVE`, partition operations, `EXPORT`/`IMPORT`, Flashback, or
+  table reorganization.
+- ROWIDs are only meaningful in the database/session that produced them.
+- **Repairing rows already corrupted by the 2^53 bug**: locate the affected rows by
+  ROWID (from a `SELECT` result or a previous `db_insert`/`db_query` response) and
+  rewrite the big-number columns in a single transaction — never re-identify by the
+  corrupted numeric key itself.
 
 ## Development
 
@@ -343,9 +394,9 @@ npm run lint
 
 Three layers of testing are provided:
 
-### 1. Unit Tests (42 tests, no DB needed)
+### 1. Unit Tests (55 tests, no DB needed)
 
-Tests pure security functions: `isReadOnlyQuery`, `validateIdentifier`, `applyRowLimit`, `isTableAllowed`, `parseTnsAliasesContent`.
+Tests pure security functions: `isReadOnlyQuery`, `validateIdentifier`, `applyRowLimit`, `isTableAllowed`, `parseTnsAliasesContent`, `assertSafeBindValues` (big-number precision guard), `buildRowidSelectSql` (ROWID fetch SQL).
 
 ```bash
 npm test                    # Run all unit tests
@@ -353,7 +404,7 @@ npm run test:watch         # Watch mode (re-runs on file change)
 npm run test:coverage       # With coverage report
 ```
 
-### 2. Offline Protocol Tests (15 tests, no DB needed)
+### 2. Offline Protocol Tests (18 tests, no DB needed)
 
 Tests the full MCP JSON-RPC handshake, tool listing, and safety guardrails (SQL injection rejection, input validation, dry-run mode) — all without an Oracle database.
 
@@ -370,6 +421,8 @@ This launches the MCP server with fake credentials and verifies:
 - `db_update`/`db_delete` reject missing WHERE clauses
 - `db_insert` dry-run returns SQL without executing
 - `db_query` rejects `max_rows > 500` (Zod validation)
+- `db_query` / `db_insert` reject numeric binds beyond 2^53 (BIND_PRECISION_ERROR, no DB needed)
+- string-form big-number binds pass the precision guard
 - `db_health_check` returns structured diagnostics even on connection failure
 
 ### 3. End-to-End Tests (requires Oracle DB)
